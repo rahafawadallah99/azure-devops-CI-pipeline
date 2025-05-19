@@ -1,6 +1,6 @@
 #this pipeline will be trigger to run by master branch of github repo. 
 trigger:
- - maste
+ - master
 #add variables
 variables:
   tag: '$(Build.BuildId)'
