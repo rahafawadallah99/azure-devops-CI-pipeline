@@ -1,31 +1,37 @@
 trigger:
 - master
 
-variables:
-  tag: '$(Build.BuildId)'
+pool:
+  name: aks-private   # Your self-hosted agent pool name
 
-stages:
-  - stage: Build
-    displayName: Build Stage
-    jobs:
-     - job: Build
-       displayName: Build job
-       pool: 
-         vmImage: 'ubuntu-latest'
-       steps:
-         # Task-1: Build Docker Image and push to Azure Container Registry ACR
-         - task: Docker@2
-           inputs:
-             containerRegistry: 'manual-devops-acr-svc'
-             repository: 'app1'
-             command: 'buildAndPush'
-             Dockerfile: '**/Dockerfile'
-             tags: 
-               $(tag)
-        
-         # Task 2 publish build artifacts
-         - task: PublishBuildArtifacts@1
-           inputs:
-            PathtoPublish: '$(System.DefaultWorkingDirectory)/kube-manifests'
-            ArtifactName: 'kube-manifests'
-            publishLocation: 'Container'
+variables:
+  IMAGE_NAME: myapp
+  ACR_NAME: rahafacrprivate001
+  RESOURCE_GROUP: aks-rg
+  CLUSTER_NAME: aks-cluster
+  ACR_LOGIN_SERVER: rahafacrprivate001.azurecr.io
+
+steps:
+- checkout: self
+
+- task: AzureCLI@2
+  inputs:
+    azureSubscription: 'azure-rahaf-acr-aks'  # The service connection name
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      echo "🔐 Logging into ACR"
+      az acr login --name $ACR_NAME
+
+      echo "🐳 Building Docker image"
+      docker build -t $ACR_LOGIN_SERVER/$IMAGE_NAME:$(Build.BuildId) .
+
+      echo "📦 Pushing image to ACR"
+      docker push $ACR_LOGIN_SERVER/$IMAGE_NAME:$(Build.BuildId)
+
+      echo "☸️ Connecting to AKS"
+      az aks get-credentials --name $CLUSTER_NAME --resource-group $RESOURCE_GROUP --overwrite-existing
+
+      echo "🚀 Deploying to AKS"
+      kubectl create deployment $IMAGE_NAME --image=$ACR_LOGIN_SERVER/$IMAGE_NAME:$(Build.BuildId) --dry-run=client -o yaml | kubectl apply -f -
+      kubectl expose deployment $IMAGE_NAME --type=LoadBalancer --port=80 --target-port=80 --dry-run=client -o yaml | kubectl apply -f -
