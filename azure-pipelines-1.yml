@@ -5,6 +5,9 @@
 trigger:
 - master
 
+pool:
+  name: aks-private   # Your self-hosted agent pool name
+
 resources:
 - repo: self
 
